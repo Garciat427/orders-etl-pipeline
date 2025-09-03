@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+
+  airflow-webserver:
+    image: apache/airflow:2.7.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: 'your-secret-key-here'
+      AIRFLOW__CORE__SECRET_KEY: 'your-secret-key-here'
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+      - ./data:/opt/airflow/data
+      - ./db:/opt/airflow/db
+      - ./requirements.txt:/opt/airflow/requirements.txt
+    command: >
+      bash -c "
+        pip install -r /opt/airflow/requirements.txt &&
+        airflow webserver
+      "
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  airflow-scheduler:
+    image: apache/airflow:2.7.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: 'your-secret-key-here'
+      AIRFLOW__CORE__SECRET_KEY: 'your-secret-key-here'
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+      - ./data:/opt/airflow/data
+      - ./db:/opt/airflow/db
+      - ./requirements.txt:/opt/airflow/requirements.txt
+    command: >
+      bash -c "
+        pip install -r /opt/airflow/requirements.txt &&
+        airflow scheduler
+      "
+
+  airflow-init:
+    image: apache/airflow:2.7.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: 'your-secret-key-here'
+      AIRFLOW__CORE__SECRET_KEY: 'your-secret-key-here'
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+      - ./data:/opt/airflow/data
+      - ./db:/opt/airflow/db
+      - ./init-airflow.sh:/opt/airflow/init-airflow.sh
+    command: bash /opt/airflow/init-airflow.sh
+    user: "0"
+
+volumes:
+  postgres_data:
